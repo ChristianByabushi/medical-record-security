@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MedVault — Secure Medical Records</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- ── LOGIN ──────────────────────────────────────────── -->
+<div id="login-screen">
+  <div class="login-container">
+    <div class="login-brand">
+      <div class="brand-icon">🛡️</div>
+      <h1>MedVault</h1>
+      <p>Secure Medical Records Platform</p>
+    </div>
+    <div class="login-card">
+      <h2>Sign In</h2>
+      <div class="form-group">
+        <label for="login-email">Email Address</label>
+        <input type="email" id="login-email" placeholder="you@hospital.org" autocomplete="email" />
+      </div>
+      <div class="form-group">
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" placeholder="••••••••••••" autocomplete="current-password" />
+      </div>
+      <button class="btn btn-primary btn-full" onclick="login()">Sign In</button>
+      <div id="login-response" class="alert hidden"></div>
+      <div class="login-footer">
+        <span>Don't have an account?</span>
+        <a href="register.html">Create Account</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── MAIN APP ────────────────────────────────────────── -->
+<div id="app" class="hidden">
+
+  <!-- Mobile sidebar backdrop -->
+  <div id="sidebar-backdrop" onclick="toggleSidebar()"
+       style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:99"></div>
+
+  <!-- Sidebar -->
+  <aside id="sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-icon-sm">🛡️</span>
+      <span class="brand-text">MedVault</span>
+    </div>
+    <nav id="main-nav"></nav>
+    <div class="sidebar-footer">
+      <div id="user-info-sidebar"></div>
+      <button class="btn btn-ghost btn-sm" onclick="logout()">Sign Out</button>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <div id="main-content">
+    <header id="top-bar">
+      <div class="top-bar-title">
+        <button id="sidebar-toggle" class="btn btn-ghost btn-sm" type="button" onclick="toggleSidebar()">☰</button>
+        <h2 id="page-title">Dashboard</h2>
+      </div>
+      <div id="user-badge"></div>
+    </header>
+
+    <div id="content-area">
+
+      <!-- ── PROFILE ──────────────────────────────────── -->
+      <div id="section-profile" class="section hidden">
+        <div class="card">
+          <div class="card-header">
+            <h3>My Profile</h3>
+            <button class="btn btn-outline btn-sm" onclick="toggleProfileEdit()">✏️ Edit</button>
+          </div>
+          <div class="card-body" id="profile-data"></div>
+          <div id="profile-edit-form" class="card-body hidden" style="border-top:1px solid #f1f5f9">
+            <div class="form-row">
+              <div class="form-group" style="flex:1">
+                <label>Full Name</label>
+                <input type="text" id="edit-full-name" placeholder="Your full name" />
+              </div>
+              <div class="form-group" style="flex:1">
+                <label>Email</label>
+                <input type="email" id="edit-email" placeholder="your@email.com" />
+              </div>
+            </div>
+            <div class="form-group" style="max-width:320px">
+              <label>Recovery Email</label>
+              <input type="email" id="recovery-email-input" placeholder="backup@example.com" />
+            </div>
+            <button class="btn btn-primary" onclick="saveProfile()">Save Changes</button>
+            <div id="profile-edit-response" class="alert hidden"></div>
+          </div>
+        </div>
+
+        <!-- Patient demographics -->
+        <div id="patient-demographics-card" class="card hidden">
+          <div class="card-header">
+            <h3>Medical Demographics</h3>
+            <button class="btn btn-outline btn-sm" onclick="toggleDemographicsEdit()">✏️ Edit</button>
+          </div>
+          <div class="card-body" id="demographics-data"></div>
+          <div id="demographics-edit-form" class="card-body hidden" style="border-top:1px solid #f1f5f9">
+            <div class="form-row">
+              <div class="form-group" style="flex:1">
+                <label>Date of Birth</label>
+                <input type="date" id="demo-dob" />
+              </div>
+              <div class="form-group" style="flex:1">
+                <label>Sex</label>
+                <select id="demo-sex">
+                  <option value="">— Select —</option>
+                  <option>Male</option><option>Female</option>
+                  <option>Other</option><option>Prefer not to say</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group" style="flex:1">
+                <label>Nationality</label>
+                <input type="text" id="demo-nationality" placeholder="e.g. American" />
+              </div>
+              <div class="form-group" style="flex:1">
+                <label>Phone Number</label>
+                <input type="tel" id="demo-phone" placeholder="+1 555 000 0000" />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group" style="flex:1">
+                <label>Insurance Provider</label>
+                <input type="text" id="demo-insurance" placeholder="e.g. BlueCross" />
+              </div>
+              <div class="form-group" style="flex:1">
+                <label>Blood Type</label>
+                <select id="demo-blood">
+                  <option value="">— Unknown —</option>
+                  <option>A+</option><option>A-</option><option>B+</option><option>B-</option>
+                  <option>AB+</option><option>AB-</option><option>O+</option><option>O-</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Known Allergies</label>
+              <textarea id="demo-allergies" rows="2" placeholder="e.g. Penicillin, Peanuts"></textarea>
+            </div>
+            <div class="form-group">
+              <label>Known Conditions</label>
+              <textarea id="demo-conditions" rows="2" placeholder="e.g. Type 2 Diabetes, Hypertension"></textarea>
+            </div>
+            <div class="form-group">
+              <label style="display:flex;align-items:center;gap:0.5rem;text-transform:none;font-size:0.875rem;font-weight:500">
+                <input type="checkbox" id="demo-dnr" style="width:auto" />
+                DNR (Do Not Resuscitate) status
+              </label>
+            </div>
+            <button class="btn btn-primary" onclick="saveDemographics()">Save Demographics</button>
+            <div id="demographics-response" class="alert hidden"></div>
+          </div>
+        </div>
+
+        <!-- Emergency contacts -->
+        <div id="emergency-contacts-card" class="card hidden">
+          <div class="card-header">
+            <h3>Emergency Contacts</h3>
+            <span class="text-muted">Max 2</span>
+          </div>
+          <div class="card-body">
+            <div id="emergency-contacts-list"></div>
+            <div id="add-emergency-contact-form" style="margin-top:1rem">
+              <div class="form-row">
+                <div class="form-group" style="flex:1">
+                  <label>Contact Email (must have Emergency Contact role)</label>
+                  <input type="email" id="ec-email" placeholder="contact@example.com" />
+                </div>
+                <div class="form-group" style="flex:1">
+                  <label>Relationship</label>
+                  <input type="text" id="ec-relationship" placeholder="e.g. Spouse, Parent" />
+                </div>
+              </div>
+              <button class="btn btn-outline" onclick="addEmergencyContact()">+ Add Contact</button>
+              <div id="ec-response" class="alert hidden"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── CONSENT (Patient / Emergency Contact) ────── -->
+      <div id="section-consent" class="section hidden">
+        <div class="card">
+          <div class="card-header">
+            <h3>Consent Grants</h3>
+            <button class="btn btn-outline btn-sm" onclick="loadGrants()">↻ Refresh</button>
+          </div>
+          <div class="card-body" id="grants-list">
+            <p class="text-muted">Click Refresh to load grants.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── REQUEST CONSENT (Doctor) ─────────────────── -->
+      <div id="section-request-consent" class="section hidden">
+        <div class="section-tabs">
+          <button id="doctor-consent-tab-request" class="section-tab active" type="button" onclick="showDoctorConsentTab('request')">Request Access</button>
+          <button id="doctor-consent-tab-grants" class="section-tab" type="button" onclick="showDoctorConsentTab('grants')">My Requests</button>
+        </div>
+        <div id="doctor-consent-pane-request">
+          <div class="card">
+            <div class="card-header"><h3>Request Patient Access</h3></div>
+            <div class="card-body">
+              <div class="form-row">
+                <div class="form-group" style="flex:1">
+                  <label>Patient Email</label>
+                  <input type="email" id="consent-patient-email" placeholder="patient@example.com" />
+                </div>
+                <div class="form-group">
+                  <label>Duration</label>
+                  <div style="display:flex;gap:0.5rem">
+                    <input type="number" id="consent-duration" value="12" min="1" max="8760" style="width:80px" />
+                    <select id="consent-unit" style="width:auto" onchange="updateConsentDuration()">
+                      <option value="hours" selected>Hours</option>
+                      <option value="days">Days</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <button class="btn btn-primary" onclick="requestConsent()">Send Request</button>
+              <div id="consent-response" class="alert hidden"></div>
+            </div>
+          </div>
+        </div>
+        <div id="doctor-consent-pane-grants" class="hidden">
+          <div class="card">
+            <div class="card-header">
+              <h3>My Access Requests</h3>
+              <button class="btn btn-outline btn-sm" type="button" onclick="loadDoctorGrants()">↻ Refresh</button>
+            </div>
+            <div class="card-body" id="doctor-grants-list">
+              <p class="text-muted">Your consent requests will appear here.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── RECORDS ───────────────────────────────────── -->
+      <div id="section-records" class="section hidden">
+        <div id="records-tabs" class="section-tabs hidden">
+          <button id="records-tab-browse" class="section-tab active" type="button" onclick="showRecordsTab('browse')">Timeline</button>
+          <button id="records-tab-create" class="section-tab" type="button" onclick="showRecordsTab('create')">New Record</button>
+          <button id="records-tab-access" class="section-tab" type="button" onclick="showRecordsTab('access')" style="display:none">Access Granted</button>
+        </div>
+
+        <!-- Browse / Timeline pane -->
+        <div id="records-pane-browse">
+          <div class="card">
+            <div class="card-header">
+              <h3>Medical Timeline</h3>
+            </div>
+            <div class="card-body">
+              <div id="patient-search-area">
+                <div class="form-group">
+                  <label>Find Patient</label>
+                  <div style="position:relative">
+                    <input type="text" id="patient-search" placeholder="Type patient email…" oninput="searchPatients()" autocomplete="off" />
+                    <div id="patient-search-results" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #e2e8f0;border-radius:0 0 7px 7px;max-height:160px;overflow-y:auto;display:none;z-index:10;box-shadow:0 4px 12px rgba(0,0,0,0.08)"></div>
+                  </div>
+                  <input type="hidden" id="selected-patient-id" />
+                  <div id="selected-patient-info" class="text-muted" style="margin-top:0.3rem"></div>
+                </div>
+              </div>
+              <div class="form-row" style="margin-bottom:1rem">
+                <div class="form-group" style="flex:1">
+                  <label>From</label>
+                  <input type="date" id="records-from" />
+                </div>
+                <div class="form-group" style="flex:1">
+                  <label>To</label>
+                  <input type="date" id="records-to" />
+                </div>
+                <button class="btn btn-primary" onclick="loadRecords()" style="align-self:flex-end">Load</button>
+              </div>
+              <div id="records-list"><p class="text-muted">Select a patient or click Load to view records.</p></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Create pane -->
+        <div id="records-pane-create" class="hidden">
+          <div class="card" id="create-record-card">
+            <div class="card-header"><h3>New Record</h3></div>
+            <div class="card-body">
+              <div class="form-group">
+                <label>Patient</label>
+                <div style="position:relative">
+                  <input type="text" id="create-patient-search" placeholder="Type patient email…" oninput="searchPatientsForCreate()" autocomplete="off" />
+                  <div id="create-patient-results" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #e2e8f0;border-radius:0 0 7px 7px;max-height:160px;overflow-y:auto;display:none;z-index:10;box-shadow:0 4px 12px rgba(0,0,0,0.08)"></div>
+                </div>
+                <input type="hidden" id="create-patient-id" />
+                <div id="create-patient-info" class="text-muted" style="margin-top:0.3rem"></div>
+              </div>
+              <div class="form-group">
+                <label>Record Type</label>
+                <select id="record-type" onchange="updateRecordForm()">
+                  <option value="diagnosis">Diagnosis</option>
+                  <option value="prescription">Prescription</option>
+                  <option value="lab_result">Lab Result</option>
+                  <option value="vitals">Vitals</option>
+                </select>
+              </div>
+              <div id="record-fields"></div>
+              <div class="form-group">
+                <label>Additional Notes (optional)</label>
+                <textarea id="record-notes" rows="2" placeholder="Any extra notes…"></textarea>
+              </div>
+              <div class="form-group">
+                <label>Save as</label>
+                <select id="record-status-select">
+                  <option value="draft">Draft — only you can see it</option>
+                  <option value="published">Published — patient is notified</option>
+                </select>
+              </div>
+              <button class="btn btn-primary btn-full" onclick="createRecord()">Save Record</button>
+              <div id="create-record-response" class="alert hidden"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Access granted pane (Doctor only) -->
+        <div id="records-pane-access" class="hidden">
+          <div class="card">
+            <div class="card-header">
+              <h3>Patients Who Granted Me Access</h3>
+              <button class="btn btn-outline btn-sm" onclick="loadDoctorAccessGrants()">↻ Refresh</button>
+            </div>
+            <div class="card-body" id="doctor-access-grants-list">
+              <p class="text-muted">Active access grants appear here. Click "View Records" to open a patient's timeline.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── ATTACHMENTS ───────────────────────────────── -->
+      <div id="section-attachments" class="section hidden">
+        <div class="card">
+          <div class="card-header">
+            <h3>File Attachments</h3>
+            <span class="text-muted" style="font-size:0.78rem">Linked to a medical record</span>
+          </div>
+          <div class="card-body">
+            <p class="text-muted" style="margin-bottom:1rem">
+              Attachments are files (X-rays, lab PDFs, scans) linked to a specific record.
+              Open a record from the Timeline and use the 📎 button to attach files.
+            </p>
+            <div class="form-group">
+              <label>Record ID (paste from timeline)</label>
+              <div style="display:flex;gap:0.5rem">
+                <input type="text" id="att-record-id" placeholder="Paste record UUID here…" style="flex:1;font-family:monospace;font-size:0.82rem" />
+                <button class="btn btn-outline" onclick="loadAttachments()">Load Files</button>
+              </div>
+            </div>
+            <div id="attachments-list"></div>
+          </div>
+        </div>
+        <div class="card" id="upload-card">
+          <div class="card-header"><h3>Upload File</h3></div>
+          <div class="card-body">
+            <div class="form-group">
+              <label>Record ID</label>
+              <input type="text" id="upload-record-id" placeholder="Paste record UUID…" style="font-family:monospace;font-size:0.82rem" />
+            </div>
+            <div class="form-group">
+              <label>File — JPEG, PNG, PDF, TIFF, DICOM (max 20 MB)</label>
+              <div class="file-drop" id="file-drop">
+                <input type="file" id="upload-file" accept=".jpg,.jpeg,.png,.pdf,.tiff,.tif,.dcm" />
+                <p>📎 Drag & drop or click to select</p>
+              </div>
+            </div>
+            <button class="btn btn-primary btn-full" onclick="uploadAttachment()">Upload</button>
+            <div id="upload-response" class="alert hidden"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── AUDIT ─────────────────────────────────────── -->
+      <div id="section-audit" class="section hidden">
+        <div class="card">
+          <div class="card-header">
+            <h3 id="audit-title">Audit Log</h3>
+            <div>
+              <button class="btn btn-outline btn-sm" onclick="loadAudit()">↻ Load</button>
+              <button class="btn btn-success btn-sm" id="verify-chain-btn" onclick="verifyChain()">Verify Chain</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div id="audit-verify-result"></div>
+            <div id="audit-list"><p class="text-muted">Click Load to view activity.</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── ADMIN PANEL ───────────────────────────────── -->
+      <div id="section-admin" class="section hidden">
+        <div class="card">
+          <div class="card-header">
+            <h3>User Management</h3>
+            <div style="display:flex;gap:0.5rem;align-items:center">
+              <select id="admin-filter-role" style="padding:0.35rem 0.6rem;border-radius:6px;border:1px solid #e2e8f0;font-size:0.8rem;background:#fff">
+                <option value="">All Roles</option>
+                <option value="Patient">Patient</option>
+                <option value="Doctor">Doctor</option>
+                <option value="Nurse">Nurse</option>
+                <option value="Lab_Technician">Lab Technician</option>
+                <option value="Front_Desk">Front Desk</option>
+                <option value="Emergency_Contact">Emergency Contact</option>
+                <option value="Admin">Admin</option>
+                <option value="SuperAdmin">SuperAdmin</option>
+              </select>
+              <button class="btn btn-outline btn-sm" onclick="loadAdminUsers()">↻ Refresh</button>
+            </div>
+          </div>
+          <div class="card-body" style="overflow-x:auto">
+            <div id="admin-users-list"><p class="text-muted">Click Refresh to load users.</p></div>
+          </div>
+        </div>
+        <div class="card" style="max-width:480px">
+          <div class="card-header"><h3>Create New Account</h3></div>
+          <div class="card-body">
+            <div class="form-group">
+              <label>Full Name</label>
+              <input type="text" id="admin-new-name" placeholder="Jane Doe" />
+            </div>
+            <div class="form-group">
+              <label>Email</label>
+              <input type="email" id="admin-new-email" placeholder="user@hospital.org" />
+            </div>
+            <div class="form-group">
+              <label>Temporary Password</label>
+              <div style="display:flex;gap:0.5rem">
+                <input type="text" id="admin-new-password" placeholder="Click Generate" readonly
+                       style="flex:1;background:#f8fafc;font-family:monospace;font-size:0.82rem" />
+                <button class="btn btn-outline btn-sm" onclick="generateTempPassword('admin-new-password')" type="button">Generate</button>
+                <button class="btn btn-ghost btn-sm" onclick="copyPassword()" title="Copy" type="button">📋</button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Role</label>
+              <select id="admin-new-role">
+                <option value="Patient">Patient</option>
+                <option value="Doctor">Doctor</option>
+                <option value="Nurse">Nurse</option>
+                <option value="Lab_Technician">Lab Technician</option>
+                <option value="Front_Desk">Front Desk</option>
+                <option value="Emergency_Contact">Emergency Contact</option>
+                <option value="Admin">Admin</option>
+                <option value="SuperAdmin">SuperAdmin</option>
+              </select>
+            </div>
+            <button class="btn btn-primary btn-full" onclick="adminCreateUser()">Create Account</button>
+            <p class="text-muted" style="margin-top:0.5rem;font-size:0.78rem">Password is emailed to the user. They must change it on first login.</p>
+            <div id="admin-create-response" class="alert hidden"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── FRONT DESK ────────────────────────────────── -->
+      <div id="section-frontdesk" class="section hidden">
+        <div class="card" style="max-width:480px">
+          <div class="card-header"><h3>Register New Patient</h3></div>
+          <div class="card-body">
+            <div class="form-group">
+              <label>Patient Full Name</label>
+              <input type="text" id="fd-name" placeholder="Patient full name" />
+            </div>
+            <div class="form-group">
+              <label>Patient Email</label>
+              <input type="email" id="fd-email" placeholder="patient@example.com" />
+            </div>
+            <div class="form-group">
+              <label>Temporary Password</label>
+              <div style="display:flex;gap:0.5rem">
+                <input type="text" id="fd-password" placeholder="Click Generate" readonly
+                       style="flex:1;background:#f8fafc;font-family:monospace;font-size:0.82rem" />
+                <button class="btn btn-outline btn-sm" onclick="generateTempPassword('fd-password')" type="button">Generate</button>
+              </div>
+            </div>
+            <button class="btn btn-primary btn-full" onclick="frontdeskRegister()">Register Patient</button>
+            <p class="text-muted" style="margin-top:0.5rem;font-size:0.78rem">Password will be emailed to the patient.</p>
+            <div id="fd-response" class="alert hidden"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SECURITY ──────────────────────────────────── -->
+      <div id="section-security" class="section hidden">
+        <div class="card" style="max-width:480px">
+          <div class="card-header"><h3>Two-Factor Authentication</h3></div>
+          <div class="card-body" id="mfa-section">
+            <div id="mfa-status"></div>
+            <div id="mfa-enroll-area" class="hidden">
+              <p style="margin-bottom:1rem;font-size:0.875rem">Scan this QR code with Google Authenticator or Authy:</p>
+              <div id="mfa-qr" style="text-align:center;margin:1rem 0"></div>
+              <p class="text-muted" style="margin-bottom:0.5rem">Or enter this secret manually:</p>
+              <code id="mfa-secret" style="display:block;background:#f1f5f9;padding:0.6rem 0.85rem;border-radius:7px;text-align:center;margin-bottom:1rem;font-size:0.85rem;letter-spacing:0.05em"></code>
+              <div class="form-group">
+                <label>6-digit code from your app</label>
+                <input type="text" id="mfa-confirm-code" placeholder="123456" maxlength="6" pattern="\d{6}" style="letter-spacing:0.2em;font-size:1.1rem;text-align:center" />
+              </div>
+              <button class="btn btn-primary" onclick="confirmMFA()">Confirm &amp; Enable MFA</button>
+              <div id="mfa-confirm-response" class="alert hidden"></div>
+            </div>
+          </div>
+        </div>
+        <div class="card" style="max-width:480px">
+          <div class="card-header"><h3>Change Password</h3></div>
+          <div class="card-body">
+            <div class="form-group">
+              <label>Current Password</label>
+              <input type="password" id="current-password" placeholder="Enter your current password" />
+            </div>
+            <div class="form-group">
+              <label>New Password (min 12 characters)</label>
+              <input type="password" id="new-password" placeholder="Enter new password" />
+            </div>
+            <button class="btn btn-primary" onclick="changePassword()">Update Password</button>
+            <div id="reset-response" class="alert hidden"></div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /content-area -->
+  </div><!-- /main-content -->
+</div><!-- /app -->
+
+<script src="api.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

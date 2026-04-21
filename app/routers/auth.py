@@ -35,7 +35,7 @@ _auth_service = AuthService()
 
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) -> UserOut:
-    return await _auth_service.register(db, body.email, body.password, body.role)
+    return await _auth_service.register(db, body.email, body.password, body.role, body.full_name)
 
 
 @router.post(

@@ -34,6 +34,17 @@ class Settings(BaseSettings):
     TLS_CERT_FILE: str = Field(default="cert.pem")
     TLS_KEY_FILE: str = Field(default="key.pem")
 
+    # Application settings
+    APP_NAME: str = Field(default="MedVault")
+    APP_URL: str = Field(default="http://localhost:3000")
+
+    # SMTP settings for sending emails
+    SMTP_HOST: str = Field(default="")
+    SMTP_PORT: int = Field(default=465)
+    SMTP_USERNAME: str = Field(default="")
+    SMTP_PASSWORD: str = Field(default="")
+    SMTP_FROM_EMAIL: str = Field(default="")
+
 
 def _validate_required(s: Settings) -> None:
     """Raise RuntimeError naming the first missing required variable."""

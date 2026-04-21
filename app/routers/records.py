@@ -27,13 +27,25 @@ async def create_record(
 ) -> RecordOut:
     client_ip = request.client.host if request.client else "0.0.0.0"
     return await _records_service.create_record(
-        db,
-        actor=claims,
+        db, actor=claims,
         patient_id=body.patient_id,
         record_type=body.record_type,
         data=body.data,
+        record_status=body.status,
         client_ip=client_ip,
     )
+
+
+@router.post("/{record_id}/publish", response_model=RecordOut, status_code=status.HTTP_200_OK)
+async def publish_record(
+    record_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    claims: TokenClaims = Depends(require_roles("Doctor", "Nurse", "Lab_Technician")),
+    _replay: None = Depends(ReplayGuard.validate),
+) -> RecordOut:
+    client_ip = request.client.host if request.client else "0.0.0.0"
+    return await _records_service.publish_record(db, actor=claims, record_id=record_id, client_ip=client_ip)
 
 
 @router.get("/{record_id}", response_model=RecordOut, status_code=status.HTTP_200_OK)
@@ -64,7 +76,7 @@ async def update_record(
     request: Request,
     body: RecordUpdate,
     db: AsyncSession = Depends(get_db),
-    claims: TokenClaims = Depends(require_roles("Doctor", "Lab_Technician")),
+    claims: TokenClaims = Depends(require_roles("Doctor", "Nurse", "Lab_Technician")),
     _replay: None = Depends(ReplayGuard.validate),
 ) -> RecordOut:
     client_ip = request.client.host if request.client else "0.0.0.0"

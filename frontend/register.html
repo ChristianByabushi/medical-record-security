@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Register — MedVault</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div id="login-screen" style="display:flex">
+  <div class="login-container">
+    <div class="login-brand">
+      <div class="brand-icon">🛡️</div>
+      <h1>MedVault</h1>
+      <p>Create Your Account</p>
+    </div>
+    <div class="login-card">
+      <h2>Register</h2>
+      <div class="form-group">
+        <label for="reg-name">Full Name</label>
+        <input type="text" id="reg-name" placeholder="John Doe" />
+      </div>
+      <div class="form-group">
+        <label for="reg-email">Email Address</label>
+        <input type="email" id="reg-email" placeholder="you@hospital.org" autocomplete="email" />
+      </div>
+      <div class="form-group">
+        <label for="reg-password">Password (min 12 characters)</label>
+        <input type="password" id="reg-password" placeholder="••••••••••••" autocomplete="new-password" />
+      </div>
+      <div class="form-group">
+        <label for="reg-role">Role</label>
+        <select id="reg-role" disabled>
+          <option value="Patient" selected>Patient</option>
+        </select>
+        <p style="font-size:0.75rem;color:#94a3b8;margin-top:-0.5rem">Other roles are assigned by an administrator.</p>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="register()">Create Account</button>
+      <div id="reg-response" class="alert hidden"></div>
+      <div class="login-footer">
+        <span>Already have an account?</span>
+        <a href="index.html">Sign In</a>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="api.js"></script>
+<script>
+async function register() {
+  const full_name = document.getElementById('reg-name').value.trim();
+  const email = document.getElementById('reg-email').value;
+  const password = document.getElementById('reg-password').value;
+  const role = document.getElementById('reg-role').value;
+  const el = document.getElementById('reg-response');
+  el.classList.remove('hidden', 'error', 'success');
+
+  try {
+    const res = await api.register(email, full_name, password, role);
+    if (!res.ok) throw new Error(res.data.detail || `Error ${res.status}`);
+    el.classList.add('success');
+    el.textContent = `Account created! Role: ${res.data.role}. Redirecting...`;
+    setTimeout(() => window.location.href = 'index.html', 1500);
+  } catch (e) {
+    el.classList.add('error');
+    el.textContent = e.message;
+  }
+}
+</script>
+</body>
+</html>

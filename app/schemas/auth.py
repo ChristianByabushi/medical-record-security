@@ -10,8 +10,9 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 class RegisterRequest(BaseModel):
     email: EmailStr
+    full_name: str = Field(min_length=2, max_length=255)
     password: str = Field(min_length=12)
-    role: Literal["Patient", "Doctor", "Nurse", "Lab_Technician"]
+    role: Literal["Patient"] = "Patient"
 
 
 class LoginRequest(BaseModel):
@@ -72,6 +73,9 @@ class UserOut(BaseModel):
 
     id: uuid.UUID
     email: str
+    full_name: str = ""
     role: str
     mfa_enabled: bool
+    must_change_password: bool = False
+    recovery_email: Optional[str] = None
     created_at: datetime

@@ -8,7 +8,6 @@ from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
-import pyotp
 from fastapi import HTTPException
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.crypto import encrypt, decrypt
 from app.core.key_manager import get_key_manager
+from app.core.totp import generate_secret, verify_totp as totp_verify, build_provisioning_uri
 from app.models.mfa_secret import MFASecret
 from app.models.password_reset_token import PasswordResetToken
 from app.models.refresh_token import RefreshToken
@@ -49,7 +49,7 @@ class AuthService:
     # Registration
     # ------------------------------------------------------------------
 
-    async def register(self, db: AsyncSession, email: str, password: str, role: str) -> UserOut:
+    async def register(self, db: AsyncSession, email: str, password: str, role: str, full_name: str = "") -> UserOut:
         """Register a new user. Raises HTTP 409 if email already exists."""
         result = await db.execute(select(User).where(User.email == email))
         existing = result.scalar_one_or_none()
@@ -61,7 +61,7 @@ class AuthService:
             )
 
         password_hash = _hash_password(password)
-        user = User(email=email, password_hash=password_hash, role=role)
+        user = User(email=email, password_hash=password_hash, role=role, full_name=full_name)
         db.add(user)
         await db.flush()  # populate user.id without committing
         await db.refresh(user)
@@ -81,6 +81,20 @@ class AuthService:
         if user is None:
             # Constant-time: verify against dummy hash to prevent timing attacks
             _verify_password(password, _DUMMY_HASH)
+            # Audit failed login (unknown email — use a nil UUID as actor)
+            try:
+                from app.services.audit_service import AuditService
+                import uuid as _uuid
+                await AuditService().append(
+                    db, event_type="LOGIN_FAILED",
+                    actor_id=_uuid.UUID(int=0),
+                    resource_id=_uuid.UUID(int=0),
+                    resource_type="user",
+                    client_ip="0.0.0.0",
+                    extra={"reason": "unknown_email"},
+                )
+            except Exception:
+                pass
             raise HTTPException(
                 status_code=401,
                 detail="Invalid credentials",
@@ -88,6 +102,19 @@ class AuthService:
             )
 
         if not _verify_password(password, user.password_hash):
+            # Audit failed login (wrong password — known user)
+            try:
+                from app.services.audit_service import AuditService
+                await AuditService().append(
+                    db, event_type="LOGIN_FAILED",
+                    actor_id=user.id,
+                    resource_id=user.id,
+                    resource_type="user",
+                    client_ip="0.0.0.0",
+                    extra={"reason": "wrong_password", "subject_user_id": str(user.id)},
+                )
+            except Exception:
+                pass
             raise HTTPException(
                 status_code=401,
                 detail="Invalid credentials",
@@ -199,7 +226,7 @@ class AuthService:
         user_result = await db.execute(select(User).where(User.id == uid))
         user = user_result.scalar_one()
 
-        secret = pyotp.random_base32()
+        secret = generate_secret()
         totp_key = get_key_manager().get_totp_key()
         ciphertext, iv, tag = encrypt(secret.encode(), totp_key)
 
@@ -219,9 +246,7 @@ class AuthService:
         db.add(mfa_secret)
         await db.flush()
 
-        provisioning_uri = pyotp.TOTP(secret).provisioning_uri(
-            name=user.email, issuer_name="SecureMedRecords"
-        )
+        provisioning_uri = build_provisioning_uri(secret, user.email)
         return MFAEnrollResponse(provisioning_uri=provisioning_uri, secret=secret)
 
     # ------------------------------------------------------------------
@@ -233,7 +258,7 @@ class AuthService:
         uid = _to_uuid(user_id)
         secret = await self._decrypt_totp_secret(db, uid)
 
-        if not pyotp.TOTP(secret).verify(totp_code):
+        if not totp_verify(secret, totp_code):
             raise HTTPException(
                 status_code=400,
                 detail="Invalid TOTP code",
@@ -274,7 +299,7 @@ class AuthService:
             raise HTTPException(status_code=401, detail="User not found")
 
         secret = await self._decrypt_totp_secret(db, uid)
-        if not pyotp.TOTP(secret).verify(totp_code):
+        if not totp_verify(secret, totp_code):
             raise HTTPException(status_code=401, detail="Invalid TOTP code")
 
         return await self._issue_token_pair(db, user)
@@ -358,7 +383,7 @@ class AuthService:
 
         if user.mfa_enabled:
             secret = await self._decrypt_totp_secret(db, str(user.id))
-            if not pyotp.TOTP(secret).verify(totp_code):
+            if not totp_verify(secret, totp_code):
                 raise HTTPException(status_code=400, detail="Invalid TOTP code")
 
         user.password_hash = _hash_password(new_password)

@@ -25,15 +25,15 @@ async def request_consent(
     return await _consent_service.request_consent(
         db,
         doctor_id=uuid.UUID(claims.user_id),
-        patient_id=body.patient_id,
-        duration_days=body.duration_days,
+        patient_email=body.patient_email,
+        duration_hours=body.duration_hours,
     )
 
 
 @router.get("", response_model=list[ConsentGrantOut], status_code=status.HTTP_200_OK)
 async def list_grants(
     db: AsyncSession = Depends(get_db),
-    claims: TokenClaims = Depends(require_roles("Patient")),
+    claims: TokenClaims = Depends(require_roles("Patient", "Emergency_Contact")),
 ) -> list[ConsentGrantOut]:
     return await _consent_service.list_grants(db, patient_id=uuid.UUID(claims.user_id))
 
@@ -46,7 +46,7 @@ async def list_grants(
 async def approve_consent(
     grant_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    claims: TokenClaims = Depends(require_roles("Patient")),
+    claims: TokenClaims = Depends(require_roles("Patient", "Emergency_Contact")),
 ) -> ConsentGrantOut:
     return await _consent_service.approve_consent(
         db, patient_id=uuid.UUID(claims.user_id), grant_id=grant_id
@@ -61,7 +61,7 @@ async def approve_consent(
 async def reject_consent(
     grant_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    claims: TokenClaims = Depends(require_roles("Patient")),
+    claims: TokenClaims = Depends(require_roles("Patient", "Emergency_Contact")),
 ) -> ConsentGrantOut:
     return await _consent_service.reject_consent(
         db, patient_id=uuid.UUID(claims.user_id), grant_id=grant_id
@@ -76,8 +76,32 @@ async def reject_consent(
 async def revoke_consent(
     grant_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    claims: TokenClaims = Depends(require_roles("Patient")),
+    claims: TokenClaims = Depends(require_roles("Patient", "Emergency_Contact")),
 ) -> ConsentGrantOut:
     return await _consent_service.revoke_consent(
         db, patient_id=uuid.UUID(claims.user_id), grant_id=grant_id
     )
+
+
+@router.post(
+    "/{grant_id}/release",
+    response_model=ConsentGrantOut,
+    status_code=status.HTTP_200_OK,
+)
+async def release_consent(
+    grant_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    claims: TokenClaims = Depends(require_roles("Doctor")),
+) -> ConsentGrantOut:
+    return await _consent_service.release_consent(
+        db, doctor_id=uuid.UUID(claims.user_id), grant_id=grant_id
+    )
+
+
+@router.get("/my-requests", response_model=list[ConsentGrantOut], status_code=status.HTTP_200_OK)
+async def list_doctor_grants(
+    db: AsyncSession = Depends(get_db),
+    claims: TokenClaims = Depends(require_roles("Doctor")),
+) -> list[ConsentGrantOut]:
+    """List all consent requests made by this doctor."""
+    return await _consent_service.list_doctor_grants(db, doctor_id=uuid.UUID(claims.user_id))

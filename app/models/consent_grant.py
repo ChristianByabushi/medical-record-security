@@ -37,7 +37,7 @@ class ConsentGrant(Base):
         nullable=False,
     )
     status: Mapped[str] = mapped_column(String(10), nullable=False, default="pending")
-    requested_duration_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    requested_duration_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=24)
     expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

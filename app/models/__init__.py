@@ -8,15 +8,12 @@ from app.models.consent_grant import ConsentGrant  # noqa: F401
 from app.models.medical_record import MedicalRecord  # noqa: F401
 from app.models.audit_log import AuditLog  # noqa: F401
 from app.models.nonce_store import NonceStore  # noqa: F401
+from app.models.email_otp import EmailOTP  # noqa: F401
+from app.models.patient_profile import PatientProfile  # noqa: F401
+from app.models.emergency_contact import EmergencyContactLink  # noqa: F401
 
 __all__ = [
-    "Base",
-    "User",
-    "MFASecret",
-    "RefreshToken",
-    "PasswordResetToken",
-    "ConsentGrant",
-    "MedicalRecord",
-    "AuditLog",
-    "NonceStore",
+    "Base", "User", "MFASecret", "RefreshToken", "PasswordResetToken",
+    "ConsentGrant", "MedicalRecord", "AuditLog", "NonceStore", "EmailOTP",
+    "PatientProfile", "EmergencyContactLink",
 ]
