@@ -24,6 +24,7 @@ async def list_audit_entries(
     resource_id: Optional[uuid.UUID] = Query(default=None),
     from_dt: Optional[datetime] = Query(default=None, alias="from"),
     to_dt: Optional[datetime] = Query(default=None, alias="to"),
+    event_type: Optional[str] = Query(default=None),
     limit: int = Query(default=50, le=200),
     offset: int = Query(default=0),
     db: AsyncSession = Depends(get_db),
@@ -42,6 +43,7 @@ async def list_audit_entries(
         subject_user_id=subject_user_id,
         from_dt=from_dt,
         to_dt=to_dt,
+        event_type=event_type,
         limit=limit,
         offset=offset,
     )

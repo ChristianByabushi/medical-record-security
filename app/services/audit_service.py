@@ -36,14 +36,20 @@ class AuditService:
         row = result.scalar_one_or_none()
         prev_hash: str = row if row is not None else "0" * 64
 
-        # Deterministic serialisation
+        # Deterministic serialisation — normalize occurred_at to UTC isoformat
+        occurred_at_str = occurred_at.isoformat()
+        if occurred_at.tzinfo is not None:
+            pass  # already has timezone info
+        else:
+            occurred_at_str = occurred_at_str + "+00:00"
+
         entry_data = {
             "event_type": event_type,
             "actor_id": str(actor_id),
             "resource_id": str(resource_id),
             "resource_type": resource_type,
             "client_ip": client_ip,
-            "occurred_at": occurred_at.isoformat(),
+            "occurred_at": occurred_at_str,
             "extra": extra,
         }
         serialized = json.dumps(entry_data, sort_keys=True, separators=(",", ":"))
@@ -64,6 +70,26 @@ class AuditService:
         await db.refresh(log_entry)
         return log_entry
 
+    def _entry_to_data(self, entry: AuditLog) -> str:
+        """Deterministic serialization of an audit entry for hash computation.
+        Normalizes occurred_at to UTC ISO format regardless of DB timezone storage."""
+        occurred_at = entry.occurred_at
+        # SQLite strips timezone info — normalize to UTC isoformat for consistency
+        if occurred_at.tzinfo is None:
+            occurred_at_str = occurred_at.isoformat() + "+00:00"
+        else:
+            occurred_at_str = occurred_at.isoformat()
+        entry_data = {
+            "event_type": entry.event_type,
+            "actor_id": str(entry.actor_id),
+            "resource_id": str(entry.resource_id),
+            "resource_type": entry.resource_type,
+            "client_ip": entry.client_ip,
+            "occurred_at": occurred_at_str,
+            "extra": entry.extra,
+        }
+        return json.dumps(entry_data, sort_keys=True, separators=(",", ":"))
+
     async def verify_chain(self, db: AsyncSession) -> ChainVerificationResult:
         """Recompute all chain hashes and verify integrity."""
         result = await db.execute(select(AuditLog).order_by(AuditLog.id.asc()))
@@ -71,16 +97,7 @@ class AuditService:
 
         prev_hash = "0" * 64
         for entry in entries:
-            entry_data = {
-                "event_type": entry.event_type,
-                "actor_id": str(entry.actor_id),
-                "resource_id": str(entry.resource_id),
-                "resource_type": entry.resource_type,
-                "client_ip": entry.client_ip,
-                "occurred_at": entry.occurred_at.isoformat(),
-                "extra": entry.extra,
-            }
-            serialized = json.dumps(entry_data, sort_keys=True, separators=(",", ":"))
+            serialized = self._entry_to_data(entry)
             expected = hashlib.sha256((serialized + prev_hash).encode()).hexdigest()
 
             if expected != entry.chain_hash:
@@ -129,16 +146,7 @@ class AuditService:
         prev_hash = "0" * 64
         hash_map: dict[int, str] = {}
         for entry in all_entries:
-            entry_data = {
-                "event_type": entry.event_type,
-                "actor_id": str(entry.actor_id),
-                "resource_id": str(entry.resource_id),
-                "resource_type": entry.resource_type,
-                "client_ip": entry.client_ip,
-                "occurred_at": entry.occurred_at.isoformat(),
-                "extra": entry.extra,
-            }
-            serialized = json.dumps(entry_data, sort_keys=True, separators=(",", ":"))
+            serialized = self._entry_to_data(entry)
             expected = hashlib.sha256((serialized + prev_hash).encode()).hexdigest()
             hash_map[entry.id] = expected
             prev_hash = entry.chain_hash  # use stored hash to continue chain
@@ -167,7 +175,8 @@ class AuditService:
             query = query.where(AuditLog.actor_id == filters.actor_id)
         if filters.resource_id is not None:
             query = query.where(AuditLog.resource_id == filters.resource_id)
-
+        if filters.event_type is not None:
+            query = query.where(AuditLog.event_type == filters.event_type)
         if filters.from_dt is not None:
             query = query.where(AuditLog.occurred_at >= filters.from_dt)
         if filters.to_dt is not None:

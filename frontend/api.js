@@ -66,6 +66,8 @@ async function tryRefreshToken() {
 
 // ── API Methods ────────────────────────────────────────
 const api = {
+  // Expose raw request for custom calls
+  request: (method, path, body = null, withReplay = false) => request(method, path, body, withReplay),
   // Auth
   register: (email, full_name, password, role) =>
     request('POST', '/auth/register', { email, full_name, password, role }),
@@ -151,7 +153,11 @@ const api = {
   // Audit
   listAudit: () => request('GET', '/audit'),
   verifyChain: () => request('GET', '/audit/verify'),
-
+  // Security event log — fetch only security-relevant events, high limit
+  securityEventLog: (windowHours = 24) => {
+    const from = new Date(Date.now() - windowHours * 3600 * 1000).toISOString();
+    return request('GET', `/audit?limit=200&from=${encodeURIComponent(from)}`);
+  },
   // Admin — User Management
   adminListUsers: (role = '', offset = 0, limit = 50) => {
     let path = `/admin/users?offset=${offset}&limit=${limit}`;
@@ -173,6 +179,10 @@ const api = {
     request('POST', `/admin/users/${user_id}/disable-mfa`),
   frontdeskRegisterPatient: (email, full_name, password) =>
     request('POST', '/admin/register-patient', { email, full_name, password }),
+
+  // Security alerts (SuperAdmin only)
+  securityAlerts: (windowHours = 24) =>
+    request('GET', `/admin/security-alerts?window_hours=${windowHours}`),
 
   // Password reset
   requestReset: (email) => request('POST', '/auth/password-reset/request', { email }, true),

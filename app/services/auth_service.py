@@ -13,6 +13,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.models.base import _get_session_factory
 from app.core.crypto import encrypt, decrypt
 from app.core.key_manager import get_key_manager
 from app.core.totp import generate_secret, verify_totp as totp_verify, build_provisioning_uri
@@ -44,6 +45,39 @@ def _verify_password(password: str, hashed: str) -> bool:
 _DUMMY_HASH = _hash_password("dummy-timing-safe-x9k2")
 
 
+async def _audit_login_failed(
+    actor_id: _uuid_module.UUID,
+    resource_id: _uuid_module.UUID,
+    client_ip: str,
+    reason: str,
+    subject_user_id: str | None = None,
+) -> None:
+    """Write a LOGIN_FAILED audit entry in its own committed session.
+
+    Uses a separate session so the entry is persisted even when the calling
+    request session is rolled back (which happens when HTTPException is raised).
+    """
+    from app.services.audit_service import AuditService
+    extra: dict = {"reason": reason}
+    if subject_user_id:
+        extra["subject_user_id"] = subject_user_id
+    try:
+        factory = _get_session_factory()
+        async with factory() as session:
+            async with session.begin():
+                await AuditService().append(
+                    session,
+                    event_type="LOGIN_FAILED",
+                    actor_id=actor_id,
+                    resource_id=resource_id,
+                    resource_type="user",
+                    client_ip=client_ip,
+                    extra=extra,
+                )
+    except Exception:
+        pass  # audit failure must never block the auth response
+
+
 class AuthService:
     # ------------------------------------------------------------------
     # Registration
@@ -72,7 +106,7 @@ class AuthService:
     # ------------------------------------------------------------------
 
     async def login(
-        self, db: AsyncSession, email: str, password: str
+        self, db: AsyncSession, email: str, password: str, client_ip: str = "0.0.0.0"
     ) -> TokenPair | PartialAuthResponse:
         """Authenticate user. Returns TokenPair or PartialAuthResponse (MFA required)."""
         result = await db.execute(select(User).where(User.email == email))
@@ -81,20 +115,14 @@ class AuthService:
         if user is None:
             # Constant-time: verify against dummy hash to prevent timing attacks
             _verify_password(password, _DUMMY_HASH)
-            # Audit failed login (unknown email — use a nil UUID as actor)
-            try:
-                from app.services.audit_service import AuditService
-                import uuid as _uuid
-                await AuditService().append(
-                    db, event_type="LOGIN_FAILED",
-                    actor_id=_uuid.UUID(int=0),
-                    resource_id=_uuid.UUID(int=0),
-                    resource_type="user",
-                    client_ip="0.0.0.0",
-                    extra={"reason": "unknown_email"},
-                )
-            except Exception:
-                pass
+            # Audit failed login in its own session so the rollback from HTTPException
+            # does not discard the audit entry.
+            await _audit_login_failed(
+                actor_id=_uuid_module.UUID(int=0),
+                resource_id=_uuid_module.UUID(int=0),
+                client_ip=client_ip,
+                reason="unknown_email",
+            )
             raise HTTPException(
                 status_code=401,
                 detail="Invalid credentials",
@@ -102,19 +130,13 @@ class AuthService:
             )
 
         if not _verify_password(password, user.password_hash):
-            # Audit failed login (wrong password — known user)
-            try:
-                from app.services.audit_service import AuditService
-                await AuditService().append(
-                    db, event_type="LOGIN_FAILED",
-                    actor_id=user.id,
-                    resource_id=user.id,
-                    resource_type="user",
-                    client_ip="0.0.0.0",
-                    extra={"reason": "wrong_password", "subject_user_id": str(user.id)},
-                )
-            except Exception:
-                pass
+            await _audit_login_failed(
+                actor_id=user.id,
+                resource_id=user.id,
+                client_ip=client_ip,
+                reason="wrong_password",
+                subject_user_id=str(user.id),
+            )
             raise HTTPException(
                 status_code=401,
                 detail="Invalid credentials",
@@ -135,7 +157,7 @@ class AuthService:
             actor_id=user.id,
             resource_id=user.id,
             resource_type="user",
-            client_ip="0.0.0.0",
+            client_ip=client_ip,
         )
 
         return token_pair

@@ -1,7 +1,7 @@
 """Auth router: registration, login, token refresh, MFA, and password reset endpoints."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.middleware.rbac import TokenClaims, get_current_user
@@ -44,11 +44,13 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) ->
     status_code=status.HTTP_200_OK,
 )
 async def login(
+    request: Request,
     body: LoginRequest,
     db: AsyncSession = Depends(get_db),
     _replay: None = Depends(ReplayGuard.validate),
 ) -> TokenPair | PartialAuthResponse:
-    return await _auth_service.login(db, body.email, body.password)
+    client_ip = request.client.host if request.client else "0.0.0.0"
+    return await _auth_service.login(db, body.email, body.password, client_ip=client_ip)
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,7 @@
 .env
+.create_superadmin.py
 *.pem
+*.attacks/
 *.key
 __pycache__/
 .pytest_cache/

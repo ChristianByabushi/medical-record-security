@@ -391,7 +391,18 @@
         <div class="card">
           <div class="card-header">
             <h3 id="audit-title">Audit Log</h3>
-            <div>
+            <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+              <select id="audit-filter-event" style="padding:0.35rem 0.6rem;border-radius:6px;border:1px solid #e2e8f0;font-size:0.8rem;background:#fff">
+                <option value="">All Events</option>
+                <option value="LOGIN_FAILED">Failed Logins</option>
+                <option value="ACCESS_DENIED">Access Denied</option>
+                <option value="REPLAY_NONCE_SEEN">Replay Blocked</option>
+                <option value="USER_LOGIN">Logins</option>
+                <option value="RECORD_READ">Record Views</option>
+                <option value="RECORD_CREATED">Records Created</option>
+                <option value="CONSENT_APPROVED">Consent Approved</option>
+                <option value="CONSENT_REVOKED">Consent Revoked</option>
+              </select>
               <button class="btn btn-outline btn-sm" onclick="loadAudit()">↻ Load</button>
               <button class="btn btn-success btn-sm" id="verify-chain-btn" onclick="verifyChain()">Verify Integrity</button>
             </div>

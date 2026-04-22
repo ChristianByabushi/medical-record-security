@@ -26,13 +26,9 @@ class AuditLog(Base):
 
     # Use Integer for SQLite compatibility (BigInteger maps to INTEGER on SQLite anyway)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    event_type: Mapped[str] = mapped_column(String(30), nullable=False)
-    # Use SQLAlchemy's dialect-agnostic Uuid type (works with both PostgreSQL and SQLite)
-    actor_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True),
-        ForeignKey("users.id"),
-        nullable=False,
-    )
+    event_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    # No FK constraint — actor may be nil UUID for unauthenticated events (replay blocks, unknown-email logins)
+    actor_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     resource_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     resource_type: Mapped[str] = mapped_column(String(30), nullable=False)
     # Stored as VARCHAR(45) for SQLAlchemy compatibility (INET not portable)

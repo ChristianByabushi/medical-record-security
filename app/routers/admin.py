@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import uuid
+from collections import Counter, defaultdict
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -10,9 +12,11 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.middleware.rbac import TokenClaims, require_roles
+from app.models.audit_log import AuditLog
 from app.models.base import get_db
 from app.models.user import User
 from app.models.refresh_token import RefreshToken
+from app.schemas.audit import FailedLoginSummary, SecurityAlertSummary
 from app.schemas.auth import UserOut
 from app.services.audit_service import AuditService
 
@@ -355,6 +359,94 @@ async def admin_disable_mfa(
     )
 
     return {"message": f"MFA disabled for {user.email}. They can now log in with just their password."}
+
+
+# ── Security alerts (admin-only) ────────────────────────
+@router.get("/security-alerts", response_model=SecurityAlertSummary)
+async def security_alerts(
+    window_hours: int = Query(default=24, ge=1, le=168, description="Look-back window in hours (max 7 days)"),
+    db: AsyncSession = Depends(get_db),
+    claims: TokenClaims = Depends(_admin_dep),
+) -> SecurityAlertSummary:
+    """
+    Return a security alert summary for the given look-back window.
+
+    Aggregates:
+    - LOGIN_FAILED events grouped by actor (email + count + IPs)
+    - ACCESS_DENIED event count
+    - REPLAY_NONCE_SEEN / REPLAY_TIMESTAMP_SKEW event count
+    - Top offending client IPs across all security events
+
+    Only accessible to Admin and SuperAdmin roles.
+    """
+    since = datetime.now(timezone.utc) - timedelta(hours=window_hours)
+
+    # Fetch all security-relevant events in the window
+    result = await db.execute(
+        select(AuditLog).where(
+            AuditLog.event_type.in_(
+                ["LOGIN_FAILED", "ACCESS_DENIED", "REPLAY_NONCE_SEEN", "REPLAY_TIMESTAMP_SKEW"]
+            ),
+            AuditLog.occurred_at >= since,
+        ).order_by(AuditLog.occurred_at.desc())
+    )
+    events = result.scalars().all()
+
+    # ── Aggregate LOGIN_FAILED by actor ──────────────────
+    failed_by_actor: dict[uuid.UUID, dict] = defaultdict(
+        lambda: {"count": 0, "last_attempt": None, "ips": set()}
+    )
+    for ev in events:
+        if ev.event_type == "LOGIN_FAILED":
+            bucket = failed_by_actor[ev.actor_id]
+            bucket["count"] += 1
+            if bucket["last_attempt"] is None or ev.occurred_at > bucket["last_attempt"]:
+                bucket["last_attempt"] = ev.occurred_at
+            bucket["ips"].add(ev.client_ip)
+
+    # Resolve actor emails/names in one query
+    actor_ids = list(failed_by_actor.keys())
+    actor_map: dict[uuid.UUID, User] = {}
+    if actor_ids:
+        users_result = await db.execute(select(User).where(User.id.in_(actor_ids)))
+        actor_map = {u.id: u for u in users_result.scalars().all()}
+
+    failed_logins = [
+        FailedLoginSummary(
+            actor_id=actor_id,
+            actor_email=actor_map.get(actor_id).email if actor_map.get(actor_id) else None,
+            actor_name=actor_map.get(actor_id).full_name if actor_map.get(actor_id) else None,
+            failure_count=data["count"],
+            last_attempt=data["last_attempt"],
+            client_ips=sorted(data["ips"]),
+        )
+        for actor_id, data in sorted(
+            failed_by_actor.items(), key=lambda x: x[1]["count"], reverse=True
+        )
+    ]
+
+    # ── Count ACCESS_DENIED and replay blocks ─────────────
+    access_denied_count = sum(1 for ev in events if ev.event_type == "ACCESS_DENIED")
+    replay_blocked_count = sum(
+        1 for ev in events
+        if ev.event_type in ("REPLAY_NONCE_SEEN", "REPLAY_TIMESTAMP_SKEW")
+    )
+
+    # ── Top offending IPs across all security events ──────
+    ip_counter: Counter = Counter(ev.client_ip for ev in events)
+    top_ips = [
+        {"ip": ip, "count": count}
+        for ip, count in ip_counter.most_common(10)
+    ]
+
+    return SecurityAlertSummary(
+        generated_at=datetime.now(timezone.utc),
+        window_hours=window_hours,
+        failed_logins=failed_logins,
+        access_denied_count=access_denied_count,
+        replay_blocked_count=replay_blocked_count,
+        top_offending_ips=top_ips,
+    )
 
 
 # ── Front Desk: register patients only ──────────────────

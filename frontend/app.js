@@ -1424,13 +1424,26 @@ EVENT_DESCRIPTIONS.CONSENT_RELEASED = {
 async function loadAudit() {
   const el = document.getElementById('audit-list');
   setLoading('audit-list', true, 'Loading audit log…');
-  const res = await api.listAudit();
+
+  const isAdmin = currentUser.role === 'Admin' || currentUser.role === 'SuperAdmin';
+  const filterEl = document.getElementById('audit-filter-event');
+  const eventFilter = filterEl ? filterEl.value : '';
+
+  // Admins get up to 200 entries; others get 50
+  const limit = isAdmin ? 200 : 50;
+  const path = `/audit?limit=${limit}` + (eventFilter ? `&event_type=${encodeURIComponent(eventFilter)}` : '');
+  const res = await api.request('GET', path);
+
   if (!res.ok) { el.innerHTML = `<p class="text-muted">${res.data.detail || 'Failed to load.'}</p>`; return; }
   let entries = Array.isArray(res.data) ? res.data : (res.data.items || []);
-  if (!entries.length) { el.innerHTML = '<p class="text-muted">No activity recorded yet.</p>'; return; }
+  if (!entries.length) {
+    el.innerHTML = eventFilter
+      ? `<p class="text-muted">No <strong>${eventFilter}</strong> events found.</p>`
+      : '<p class="text-muted">No activity recorded yet.</p>';
+    return;
+  }
 
   // Non-admins never see security failure events
-  const isAdmin = currentUser.role === 'Admin' || currentUser.role === 'SuperAdmin';
   if (!isAdmin) {
     entries = entries.filter(e => e.event_type !== 'LOGIN_FAILED' && e.event_type !== 'ACCESS_DENIED');
   }

@@ -1,0 +1,44 @@
+\contentsline {section}{\numberline {1}Introduction}{3}{section.1}%
+\contentsline {subsection}{\numberline {1.1}Objectives}{3}{subsection.1.1}%
+\contentsline {subsection}{\numberline {1.2}Technology Stack}{3}{subsection.1.2}%
+\contentsline {section}{\numberline {2}System Architecture}{3}{section.2}%
+\contentsline {subsection}{\numberline {2.1}Layered Architecture with Trust Boundaries}{3}{subsection.2.1}%
+\contentsline {subsection}{\numberline {2.2}Trust Boundaries}{4}{subsection.2.2}%
+\contentsline {subsection}{\numberline {2.3}Module Interaction Diagram}{5}{subsection.2.3}%
+\contentsline {subsection}{\numberline {2.4}Database Schema (Key Tables)}{5}{subsection.2.4}%
+\contentsline {section}{\numberline {3}Threat Model}{5}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Assets}{5}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Adversary Profiles}{6}{subsection.3.2}%
+\contentsline {subsection}{\numberline {3.3}STRIDE Threat Analysis}{6}{subsection.3.3}%
+\contentsline {subsection}{\numberline {3.4}Risk Register}{6}{subsection.3.4}%
+\contentsline {section}{\numberline {4}Secure Protocol Design}{6}{section.4}%
+\contentsline {subsection}{\numberline {4.1}Authentication Protocol}{7}{subsection.4.1}%
+\contentsline {subsection}{\numberline {4.2}Key Exchange and Token Lifecycle}{7}{subsection.4.2}%
+\contentsline {subsection}{\numberline {4.3}Replay Attack Prevention}{7}{subsection.4.3}%
+\contentsline {subsection}{\numberline {4.4}Encryption Design}{8}{subsection.4.4}%
+\contentsline {subsubsection}{\numberline {4.4.1}AES-256-GCM Field-Level Encryption}{8}{subsubsection.4.4.1}%
+\contentsline {subsubsection}{\numberline {4.4.2}Custom TOTP (RFC 6238)}{8}{subsubsection.4.4.2}%
+\contentsline {subsection}{\numberline {4.5}Audit Chain Algorithm}{9}{subsection.4.5}%
+\contentsline {subsection}{\numberline {4.6}Consent Protocol}{9}{subsection.4.6}%
+\contentsline {section}{\numberline {5}Working Prototype}{9}{section.5}%
+\contentsline {subsection}{\numberline {5.1}Implementation Overview}{9}{subsection.5.1}%
+\contentsline {subsection}{\numberline {5.2}Project Structure}{9}{subsection.5.2}%
+\contentsline {subsection}{\numberline {5.3}API Endpoints}{10}{subsection.5.3}%
+\contentsline {subsection}{\numberline {5.4}Key Implementation Highlights}{11}{subsection.5.4}%
+\contentsline {subsection}{\numberline {5.5}Testing}{11}{subsection.5.5}%
+\contentsline {section}{\numberline {6}Attack \& Defence Demonstrations}{11}{section.6}%
+\contentsline {subsection}{\numberline {6.1}Attack 1 -- Replay Attack}{11}{subsection.6.1}%
+\contentsline {subsection}{\numberline {6.2}Attack 2 -- Stale Timestamp Rejection}{12}{subsection.6.2}%
+\contentsline {subsection}{\numberline {6.3}Attack 3 -- Privilege Escalation (Patient $\to $ Doctor)}{12}{subsection.6.3}%
+\contentsline {subsection}{\numberline {6.4}Attack 4 -- User Enumeration}{12}{subsection.6.4}%
+\contentsline {subsection}{\numberline {6.5}Attack 5 -- Brute Force Detection}{13}{subsection.6.5}%
+\contentsline {subsection}{\numberline {6.6}Attack 6 -- Audit Log Tampering}{13}{subsection.6.6}%
+\contentsline {subsection}{\numberline {6.7}Attack 7 -- Unauthorised Record Access (No Consent)}{13}{subsection.6.7}%
+\contentsline {subsection}{\numberline {6.8}Attack 8 -- Cross-Patient Access}{14}{subsection.6.8}%
+\contentsline {subsection}{\numberline {6.9}Attack 9 -- Draft Record Leakage}{14}{subsection.6.9}%
+\contentsline {subsection}{\numberline {6.10}Attack 10 -- AES-GCM Ciphertext Tampering}{14}{subsection.6.10}%
+\contentsline {subsection}{\numberline {6.11}Attack 11 -- Token Theft / Expired Token}{15}{subsection.6.11}%
+\contentsline {subsection}{\numberline {6.12}Summary}{15}{subsection.6.12}%
+\contentsline {section}{\numberline {7}Security Design Decisions}{15}{section.7}%
+\contentsline {section}{\numberline {8}Conclusion}{16}{section.8}%
+\contentsline {section}{\numberline {A}Environment Variables Reference}{17}{appendix.A}%
