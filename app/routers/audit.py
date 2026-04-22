@@ -53,9 +53,8 @@ async def verify_chain(
     db: AsyncSession = Depends(get_db),
     claims: TokenClaims = Depends(get_current_user),
 ) -> ChainVerificationResult:
-    # Only admins can verify the full chain
-    if claims.role not in ("Admin", "SuperAdmin"):
-        from fastapi import HTTPException
-        raise HTTPException(status_code=403, detail="Insufficient permissions")
-
-    return await _audit_service.verify_chain(db)
+    # Admins verify the full chain; all other roles verify only their own entries
+    if claims.role in ("Admin", "SuperAdmin"):
+        return await _audit_service.verify_chain(db)
+    else:
+        return await _audit_service.verify_my_entries(db, uuid.UUID(claims.user_id))

@@ -4,6 +4,35 @@ let currentUser = null;
 let doctorConsentTab = 'request';
 let recordsTab = 'browse';
 
+// ── Loading spinner ────────────────────────────────────
+function setLoading(elId, loading, text = '') {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  if (loading) {
+    el.innerHTML = `<div style="display:flex;align-items:center;gap:0.6rem;color:#94a3b8;padding:1rem 0">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 0.8s linear infinite">
+        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+      </svg>
+      <span>${text || 'Loading…'}</span>
+    </div>`;
+  }
+}
+
+// Inject spinner CSS once
+(function() {
+  const s = document.createElement('style');
+  s.textContent = '@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}';
+  document.head.appendChild(s);
+})();
+
+function showAlert(elId, type, msg) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.className = `alert ${type}`;
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
 function displayName(user) {
   if (!user) return '';
   return user.full_name ? `${user.full_name} (${user.email})` : user.email;
@@ -19,7 +48,15 @@ async function login() {
   const email = document.getElementById('login-email').value;
   const password = document.getElementById('login-password').value;
   const el = document.getElementById('login-response');
+  const btn = document.querySelector('#login-screen .btn-primary');
   el.classList.remove('hidden', 'error', 'success');
+
+  if (!email || !password) {
+    el.className = 'alert error'; el.textContent = 'Enter your email and password'; el.classList.remove('hidden'); return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Signing in…';
 
   try {
     const res = await api.login(email, password);
@@ -27,11 +64,13 @@ async function login() {
 
     // MFA required — show TOTP input
     if (res.data.partial_token) {
+      btn.disabled = false;
+      btn.textContent = 'Sign In';
       el.classList.add('success');
       el.innerHTML = `
         MFA required. Enter your 6-digit code:<br/>
-        <input type="text" id="mfa-login-code" placeholder="123456" maxlength="6" style="margin-top:0.5rem" />
-        <button class="btn btn-primary btn-sm" style="margin-top:0.5rem" onclick="verifyMFALogin('${res.data.partial_token}')">Verify</button>
+        <input type="text" id="mfa-login-code" placeholder="123456" maxlength="6" style="margin-top:0.5rem;letter-spacing:0.2em;text-align:center" />
+        <button class="btn btn-primary btn-sm" style="margin-top:0.5rem;width:100%" onclick="verifyMFALogin('${res.data.partial_token}')">Verify</button>
       `;
       return;
     }
@@ -44,6 +83,8 @@ async function login() {
   } catch (e) {
     el.classList.add('error');
     el.textContent = e.message;
+    btn.disabled = false;
+    btn.textContent = 'Sign In';
   }
 }
 
@@ -127,10 +168,9 @@ function buildNav() {
     tabs.push({ id: 'records', label: 'Patient Records' });
   }
 
-  // Lab Technician
+  // Lab Technician — attachments only (no timeline, no new record)
   if (role === 'Lab_Technician') {
-    tabs.push({ id: 'records', label: 'Lab Results' });
-    tabs.push({ id: 'attachments', label: 'Attachments' });
+    tabs.push({ id: 'attachments', label: 'Lab Results' });
   }
 
   // Front Desk
@@ -187,14 +227,20 @@ function showSection(id) {
     const title = document.getElementById('audit-title');
     if (currentUser.role === 'Patient') {
       title.textContent = 'Who Accessed My Data';
-      if (verifyBtn) verifyBtn.style.display = 'none';
-    } else {
+    } else if (currentUser.role === 'Admin' || currentUser.role === 'SuperAdmin') {
       title.textContent = 'Audit Log';
-      if (verifyBtn) verifyBtn.style.display = '';
+    } else {
+      title.textContent = 'My Activity';
     }
+    // Show verify button for everyone — patients verify their own entries, admins verify full chain
+    if (verifyBtn) verifyBtn.style.display = '';
     loadAudit();
   }
-  if (id === 'security') loadMFAStatus();
+  if (id === 'attachments') {
+    if (currentUser.role === 'Lab_Technician') {
+      showLabTechView();
+    }
+  }
   if (id === 'records') {
     const tabs = document.getElementById('records-tabs');
     const createCard = document.getElementById('create-record-card');
@@ -203,7 +249,6 @@ function showSection(id) {
 
     if (role === 'Patient') {
       if (tabs) tabs.classList.add('hidden');
-      // Patient: hide create form and search, auto-load own records
       if (createCard) createCard.style.display = 'none';
       if (searchArea) searchArea.style.display = 'none';
       document.getElementById('selected-patient-id').value = currentUser.id;
@@ -211,38 +256,54 @@ function showSection(id) {
       loadRecords();
     } else if (role === 'Nurse') {
       if (tabs) tabs.classList.remove('hidden');
-      // Nurse: can record vitals only, show search
       if (createCard) createCard.style.display = '';
       if (searchArea) searchArea.style.display = '';
-      // Limit record types for nurse
+      // Nurse: vitals, medication_log, triage only
       const typeSelect = document.getElementById('record-type');
-      if (typeSelect) typeSelect.innerHTML = '<option value="vitals">Vitals</option><option value="medication_log">Medication Log</option><option value="triage">Triage</option>';
+      if (typeSelect) typeSelect.innerHTML =
+        '<option value="vitals">Vitals</option>' +
+        '<option value="medication_log">Medication Log</option>' +
+        '<option value="triage">Triage</option>';
+      // Nurse always saves as draft (no publish option)
+      const statusSel = document.getElementById('record-status-select');
+      if (statusSel) statusSel.closest('.form-group').style.display = 'none';
+      const accessTabBtn = document.getElementById('records-tab-access');
+      if (accessTabBtn) accessTabBtn.style.display = 'none';
       updateRecordForm();
       showRecordsTab(recordsTab);
     } else if (role === 'Front_Desk') {
       if (tabs) tabs.classList.add('hidden');
-      // Front desk: view only, no create
       if (createCard) createCard.style.display = 'none';
       if (searchArea) searchArea.style.display = '';
       showRecordsTab('browse');
     } else if (role === 'Emergency_Contact') {
       if (tabs) tabs.classList.add('hidden');
-      // Emergency contact: limited view, no create
       if (createCard) createCard.style.display = 'none';
       if (searchArea) searchArea.style.display = 'none';
       showRecordsTab('browse');
     } else {
+      // Doctor
       if (tabs) tabs.classList.remove('hidden');
-      // Doctor, Lab_Technician: full access
       if (createCard) createCard.style.display = '';
       if (searchArea) searchArea.style.display = '';
-      // Show "Access Granted" tab only for Doctor
       const accessTabBtn = document.getElementById('records-tab-access');
-      if (accessTabBtn) accessTabBtn.style.display = currentUser.role === 'Doctor' ? '' : 'none';
+      if (accessTabBtn) accessTabBtn.style.display = '';
+      // Restore all record types for doctor
+      const typeSelect = document.getElementById('record-type');
+      if (typeSelect && typeSelect.options.length < 4) {
+        typeSelect.innerHTML =
+          '<option value="diagnosis">Diagnosis</option>' +
+          '<option value="prescription">Prescription</option>' +
+          '<option value="lab_result">Lab Result</option>' +
+          '<option value="vitals">Vitals</option>';
+      }
+      const statusSel = document.getElementById('record-status-select');
+      if (statusSel) statusSel.closest('.form-group').style.display = '';
       updateRecordForm();
       showRecordsTab(recordsTab);
     }
   }
+  if (id === 'security') loadMFAStatus();
 }
 
 function toggleSidebar() {
@@ -305,6 +366,7 @@ function toggleDemographicsEdit() {
 
 async function loadProfile() {
   const el = document.getElementById('profile-data');
+  setLoading('profile-data', true, 'Loading profile…');
   const res = await api.getMe();
   if (!res.ok) { el.textContent = 'Failed to load profile'; return; }
   const u = res.data;
@@ -452,7 +514,7 @@ async function removeEmergencyContact(linkId) {
 // ── Consent (Patient) ──────────────────────────────────
 async function loadGrants() {
   const el = document.getElementById('grants-list');
-  el.innerHTML = '<p class="text-muted">Loading...</p>';
+  setLoading('grants-list', true, 'Loading consent grants…');
   const res = await api.listGrants();
   if (!res.ok) { el.innerHTML = '<p class="text-muted">Failed to load grants.</p>'; return; }
   const grants = res.data;
@@ -492,7 +554,7 @@ function showDoctorConsentTab(tab) {
 
 async function loadDoctorGrants() {
   const el = document.getElementById('doctor-grants-list');
-  el.innerHTML = '<p class="text-muted">Loading...</p>';
+  setLoading('doctor-grants-list', true, 'Loading requests…');
   const res = await api.listDoctorGrants();
   if (!res.ok) { el.innerHTML = '<p class="text-muted">Failed to load requests.</p>'; return; }
   const grants = res.data || [];
@@ -525,7 +587,7 @@ async function loadDoctorGrants() {
 async function loadDoctorAccessGrants() {
   const el = document.getElementById('doctor-access-grants-list');
   if (!el) return;
-  el.innerHTML = '<p class="text-muted">Loading...</p>';
+  setLoading('doctor-access-grants-list', true, 'Loading access grants…');
   const res = await api.listDoctorGrants();
   if (!res.ok) { el.innerHTML = '<p class="text-muted">Failed to load.</p>'; return; }
   const grants = (res.data || []).filter(g => g.status === 'active');
@@ -558,13 +620,18 @@ async function requestConsent() {
   if (unit === 'days') duration = duration * 24;
   const el = document.getElementById('consent-response');
   el.classList.remove('hidden', 'error', 'success');
-  if (!patient_email) { el.classList.add('error'); el.textContent = 'Enter patient email'; return; }
+  if (!patient_email) { showAlert('consent-response', 'error', 'Enter patient email'); return; }
+  el.className = 'alert'; el.textContent = 'Sending request…'; el.classList.remove('hidden');
   const res = await api.requestConsent(patient_email, duration);
-  if (res.ok) { el.classList.add('success'); el.textContent = `Access request sent to ${patient_email}! They will be notified by email.`; }
-  else { el.classList.add('error'); el.textContent = res.data.detail || 'Failed'; }
+  if (res.ok) showAlert('consent-response', 'success', `Access request sent to ${patient_email}. They will be notified by email.`);
+  else showAlert('consent-response', 'error', res.data.detail || 'Failed');
 }
 
-// ── Patient Search ─────────────────────────────────────
+// ── Consent duration unit toggle ──────────────────────
+function updateConsentDuration() {
+  // No conversion needed — we just read the value and unit together in requestConsent()
+  // This function exists to satisfy the onchange handler on the unit select
+}
 let searchTimeout = null;
 
 async function searchPatients() {
@@ -699,7 +766,7 @@ async function loadRecords(page = 0) {
   recordsPage = page;
   const pid = document.getElementById('selected-patient-id').value || currentUser.id;
   const el = document.getElementById('records-list');
-  el.innerHTML = '<p class="text-muted">Loading...</p>';
+  setLoading('records-list', true, 'Loading records…');
   const res = await api.listRecords(pid);
   if (!res.ok) { el.innerHTML = `<p class="text-muted">${res.data.detail || 'Failed to load records'}</p>`; return; }
   let records = Array.isArray(res.data) ? res.data : (res.data.items || []);
@@ -719,9 +786,33 @@ async function loadRecords(page = 0) {
 
   if (!paged.length) { el.innerHTML = '<p class="text-muted">No records found.</p>'; return; }
 
+  // Fetch active consent for this patient (for doctors/nurses — shows expiry)
+  let consentExpiry = null;
+  if ((currentUser.role === 'Doctor' || currentUser.role === 'Nurse') && pid !== currentUser.id) {
+    const grantsRes = await api.listDoctorGrants();
+    if (grantsRes.ok) {
+      const active = (grantsRes.data || []).find(g =>
+        g.patient_id === pid && g.status === 'active' && g.expires_at
+      );
+      if (active) consentExpiry = new Date(active.expires_at);
+    }
+  }
+
   const isCreator = (r) => r.created_by === currentUser.id;
-  const canEdit = (r) => isCreator(r) || currentUser.role === 'Doctor';
   const canPublish = (r) => isCreator(r) && r.status === 'draft';
+  const canEdit = (r) => isCreator(r) || (currentUser.role === 'Doctor' && r.status === 'published');
+
+  // Consent expiry banner
+  let consentBanner = '';
+  if (consentExpiry) {
+    const now = new Date();
+    const diffMs = consentExpiry - now;
+    const diffH = Math.round(diffMs / 3600000);
+    const isExpiringSoon = diffH < 2;
+    consentBanner = `<div style="background:${isExpiringSoon ? '#fef3c7' : '#f0fdf4'};border:1px solid ${isExpiringSoon ? '#fde68a' : '#bbf7d0'};border-radius:8px;padding:0.65rem 1rem;margin-bottom:1rem;font-size:0.83rem;color:${isExpiringSoon ? '#92400e' : '#166534'}">
+      ${isExpiringSoon ? '⚠️' : '🔓'} Access granted until <strong>${consentExpiry.toLocaleString()}</strong>${isExpiringSoon ? ' — expiring soon' : ''}
+    </div>`;
+  }
 
   const items = paged.map(r => {
     const data = r.data || {};
@@ -733,7 +824,7 @@ async function loadRecords(page = 0) {
     const actorLabel = formatUserLabel(r.creator_name, r.creator_email, r.created_by);
     const draftBadge = r.status === 'draft' ? '<span class="tl-draft-badge">Draft</span>' : '';
     const publishedInfo = r.status === 'published' && r.published_at
-      ? `<span style="color:#059669;font-size:0.72rem">Published ${new Date(r.published_at).toLocaleDateString()}</span>`
+      ? `<span class="tl-published-badge">Published</span>`
       : '';
 
     const actions = [];
@@ -757,7 +848,7 @@ async function loadRecords(page = 0) {
         </div>
         <div class="tl-fields">${fields}</div>
         ${notes}
-        <div class="tl-meta">By ${actorLabel}</div>
+        <div class="tl-meta">By ${actorLabel} · ${new Date(r.created_at).toLocaleString()}</div>
         ${actions.length ? `<div class="tl-actions">${actions.join('')}</div>` : ''}
       </div>
     </div>`;
@@ -774,7 +865,7 @@ async function loadRecords(page = 0) {
     </div>`;
   }
 
-  el.innerHTML = `<div class="timeline">${items}</div>${pagination}
+  el.innerHTML = consentBanner + `<div class="timeline">${items}</div>${pagination}
     <p class="text-muted" style="margin-top:0.5rem">${total} record${total !== 1 ? 's' : ''}</p>`;
 }
 
@@ -832,31 +923,33 @@ async function createRecord() {
   if (notes) data.notes = notes;
 
   const el = document.getElementById('create-record-response');
-  el.classList.remove('hidden', 'error', 'success');
+  el.className = 'alert'; el.textContent = 'Saving…'; el.classList.remove('hidden');
 
   // Check if editing existing record
   const editingId = el.dataset.editingId;
   if (editingId) {
     const res = await api.updateRecord(editingId, data);
     if (res.ok) {
-      el.classList.add('success'); el.textContent = 'Record updated!';
+      el.className = 'alert success'; el.textContent = 'Record updated!';
       delete el.dataset.editingId;
       setTimeout(() => { showRecordsTab('browse'); loadRecords(); }, 800);
-    } else { el.classList.add('error'); el.textContent = res.data.detail || 'Failed'; }
+    } else { el.className = 'alert error'; el.textContent = res.data.detail || 'Failed'; }
     return;
   }
 
-  // Determine status: Doctor/Nurse can choose draft or publish
-  const statusBtn = document.getElementById('record-status-select');
-  const record_status = statusBtn ? statusBtn.value : 'draft';
+  // Nurses always save as draft (status select is hidden for them)
+  const statusSel = document.getElementById('record-status-select');
+  const record_status = (statusSel && statusSel.closest('.form-group').style.display !== 'none')
+    ? statusSel.value
+    : 'draft';
 
   const res = await api.createRecord(patient_id, record_type, data, record_status);
   if (res.ok) {
-    el.classList.add('success');
+    el.className = 'alert success';
     el.textContent = record_status === 'draft'
-      ? `Draft saved (ID: ${res.data.id}). Publish when ready.`
+      ? `Draft saved. Publish when ready.`
       : `Record published! Patient has been notified.`;
-  } else { el.classList.add('error'); el.textContent = res.data.detail || 'Failed'; }
+  } else { el.className = 'alert error'; el.textContent = res.data.detail || 'Failed'; }
 }
 
 // ── Attachments ────────────────────────────────────────
@@ -938,11 +1031,185 @@ async function deleteAttachment(recordId, attachmentId) {
   else alert(res.data.detail || 'Delete failed');
 }
 
+// ── Lab Technician dedicated view ─────────────────────
+function showLabTechView() {
+  const section = document.getElementById('section-attachments');
+  if (!section) return;
+  // Replace content with lab-tech specific UI
+  section.innerHTML = `
+    <div class="card">
+      <div class="card-header">
+        <h3>🔬 Submit Lab Result</h3>
+        <span class="text-muted" style="font-size:0.78rem">Results are private until you publish them</span>
+      </div>
+      <div class="card-body">
+        <div class="form-group">
+          <label>Patient Email</label>
+          <div style="position:relative">
+            <input type="text" id="lt-patient-search" placeholder="Type patient email…" oninput="searchLabPatient()" autocomplete="off" />
+            <div id="lt-patient-results" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #e2e8f0;border-radius:0 0 7px 7px;max-height:160px;overflow-y:auto;display:none;z-index:10;box-shadow:0 4px 12px rgba(0,0,0,0.08)"></div>
+          </div>
+          <input type="hidden" id="lt-patient-id" />
+          <div id="lt-patient-info" class="text-muted" style="margin-top:0.3rem"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="flex:1">
+            <label>Test Name &amp; Type *</label>
+            <input type="text" id="lt-test-name" placeholder="e.g. Complete Blood Count (CBC)" />
+          </div>
+          <div class="form-group" style="flex:1">
+            <label>Sample Date *</label>
+            <input type="date" id="lt-sample-date" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="flex:1">
+            <label>Result Date</label>
+            <input type="date" id="lt-result-date" />
+          </div>
+          <div class="form-group" style="flex:1">
+            <label>Result Summary *</label>
+            <input type="text" id="lt-result" placeholder="e.g. Hemoglobin 13.5 g/dL — Normal" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Report File (PDF, JPEG, PNG, TIFF, DICOM — max 20 MB) *</label>
+          <div class="file-drop" id="lt-file-drop">
+            <input type="file" id="lt-file" accept=".jpg,.jpeg,.png,.pdf,.tiff,.tif,.dcm" />
+            <p>📎 Drag &amp; drop or click to select the report file</p>
+          </div>
+          <div id="lt-file-name" class="text-muted" style="margin-top:0.3rem"></div>
+        </div>
+        <div class="form-group">
+          <label>Additional Notes</label>
+          <textarea id="lt-notes" rows="2" placeholder="Any additional observations…"></textarea>
+        </div>
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
+          <button class="btn btn-outline" onclick="submitLabResult('draft')">Save as Draft</button>
+          <button class="btn btn-primary" onclick="submitLabResult('published')">Submit &amp; Publish</button>
+        </div>
+        <div id="lt-response" class="alert hidden"></div>
+      </div>
+    </div>
+
+    <div class="card" id="lt-my-results-card">
+      <div class="card-header">
+        <h3>My Submitted Results</h3>
+        <button class="btn btn-outline btn-sm" onclick="loadMyLabResults()">↻ Refresh</button>
+      </div>
+      <div class="card-body" id="lt-results-list">
+        <p class="text-muted">Click Refresh to view your submitted results.</p>
+      </div>
+    </div>
+  `;
+
+  // Wire up file name display
+  document.getElementById('lt-file').addEventListener('change', function() {
+    const f = this.files[0];
+    document.getElementById('lt-file-name').textContent = f ? `Selected: ${f.name} (${formatBytes(f.size)})` : '';
+  });
+}
+
+let ltSearchTimeout = null;
+async function searchLabPatient() {
+  const q = document.getElementById('lt-patient-search').value;
+  const el = document.getElementById('lt-patient-results');
+  if (q.length < 3) { el.style.display = 'none'; return; }
+  clearTimeout(ltSearchTimeout);
+  ltSearchTimeout = setTimeout(async () => {
+    const res = await api.searchPatients(q);
+    if (!res.ok || !res.data.length) { el.style.display = 'none'; return; }
+    el.style.display = 'block';
+    el.innerHTML = res.data.map(u =>
+      `<div style="padding:0.5rem 0.75rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid #f1f5f9"
+            onmouseover="this.style.background='#f0f7ff'" onmouseout="this.style.background=''"
+            onclick="selectLabPatient('${u.id}','${u.email}','${(u.full_name||'').replace(/'/g,"\\'")}')">
+        ${displayName(u)}
+      </div>`
+    ).join('');
+  }, 300);
+}
+
+function selectLabPatient(id, email, name) {
+  document.getElementById('lt-patient-id').value = id;
+  document.getElementById('lt-patient-search').value = email;
+  document.getElementById('lt-patient-info').textContent = name ? `Patient: ${name} (${email})` : `Patient: ${email}`;
+  document.getElementById('lt-patient-results').style.display = 'none';
+}
+
+async function submitLabResult(recordStatus) {
+  const patientId = document.getElementById('lt-patient-id').value;
+  const testName = document.getElementById('lt-test-name').value.trim();
+  const sampleDate = document.getElementById('lt-sample-date').value;
+  const resultDate = document.getElementById('lt-result-date').value;
+  const result = document.getElementById('lt-result').value.trim();
+  const notes = document.getElementById('lt-notes').value.trim();
+  const fileInput = document.getElementById('lt-file');
+  const el = document.getElementById('lt-response');
+
+  el.classList.remove('hidden', 'error', 'success');
+
+  if (!patientId) { showAlert('lt-response', 'error', 'Select a patient first'); return; }
+  if (!testName) { showAlert('lt-response', 'error', 'Test name is required'); return; }
+  if (!sampleDate) { showAlert('lt-response', 'error', 'Sample date is required'); return; }
+  if (!result) { showAlert('lt-response', 'error', 'Result summary is required'); return; }
+  if (!fileInput.files.length) { showAlert('lt-response', 'error', 'Attach the report file'); return; }
+
+  el.className = 'alert'; el.textContent = 'Submitting…'; el.classList.remove('hidden');
+
+  // Step 1: create the record
+  const data = {
+    test_name: testName,
+    sample_date: sampleDate,
+    result_date: resultDate || null,
+    result: result,
+    lab_technician_id: currentUser.id,
+  };
+  if (notes) data.notes = notes;
+
+  const recRes = await api.createRecord(patientId, 'lab_result', data, recordStatus);
+  if (!recRes.ok) { showAlert('lt-response', 'error', recRes.data.detail || 'Failed to create record'); return; }
+
+  const recordId = recRes.data.id;
+
+  // Step 2: upload the file attachment
+  const uploadRes = await api.uploadAttachment(recordId, fileInput.files[0]);
+  if (!uploadRes.ok) {
+    showAlert('lt-response', 'error', `Record created but file upload failed: ${uploadRes.data.detail || 'Unknown error'}`);
+    return;
+  }
+
+  showAlert('lt-response', 'success',
+    recordStatus === 'published'
+      ? `Lab result published! Patient has been notified. Record ID: ${recordId}`
+      : `Draft saved. You can review and publish when ready. Record ID: ${recordId}`
+  );
+
+  // Clear form
+  document.getElementById('lt-test-name').value = '';
+  document.getElementById('lt-sample-date').value = '';
+  document.getElementById('lt-result-date').value = '';
+  document.getElementById('lt-result').value = '';
+  document.getElementById('lt-notes').value = '';
+  document.getElementById('lt-patient-id').value = '';
+  document.getElementById('lt-patient-search').value = '';
+  document.getElementById('lt-patient-info').textContent = '';
+  document.getElementById('lt-file-name').textContent = '';
+  fileInput.value = '';
+}
+
+async function loadMyLabResults() {
+  const el = document.getElementById('lt-results-list');
+  if (!el) return;
+  el.innerHTML = `<p class="text-muted">To view a submitted result, search for the patient above and check the record ID shown after submission.</p>
+    <p class="text-muted" style="margin-top:0.5rem">Once published, results are visible to the patient and their consented doctors.</p>`;
+}
+
 // ── Admin Panel ────────────────────────────────────────
 async function loadAdminUsers() {
   const role = document.getElementById('admin-filter-role').value;
   const el = document.getElementById('admin-users-list');
-  el.innerHTML = '<p class="text-muted">Loading...</p>';
+  setLoading('admin-users-list', true, 'Loading users…');
   const res = await api.adminListUsers(role);
   if (!res.ok) { el.innerHTML = `<p class="text-muted">${res.data.detail || 'Failed'}</p>`; return; }
   const users = res.data.items || [];
@@ -997,6 +1264,7 @@ async function adminCreateUser() {
   if (!email) { el.classList.add('error'); el.textContent = 'Email required'; return; }
   if (!password) { el.classList.add('error'); el.textContent = 'Click "Generate" to create a password first'; return; }
 
+  el.className = 'alert'; el.textContent = 'Creating account…'; el.classList.remove('hidden');
   const res = await api.adminCreateUser(email, password, role, full_name);
   if (res.ok) {
     el.classList.add('success');
@@ -1040,6 +1308,7 @@ async function frontdeskRegister() {
   if (!full_name) { el.classList.add('error'); el.textContent = 'Enter patient full name'; return; }
   if (!email) { el.classList.add('error'); el.textContent = 'Enter patient email'; return; }
   if (!password) { el.classList.add('error'); el.textContent = 'Click Generate first'; return; }
+  el.className = 'alert'; el.textContent = 'Registering patient…'; el.classList.remove('hidden');
   const res = await api.frontdeskRegisterPatient(email, full_name, password);
   if (res.ok) {
     el.classList.add('success');
@@ -1154,7 +1423,7 @@ EVENT_DESCRIPTIONS.CONSENT_RELEASED = {
 
 async function loadAudit() {
   const el = document.getElementById('audit-list');
-  el.innerHTML = '<p class="text-muted">Loading...</p>';
+  setLoading('audit-list', true, 'Loading audit log…');
   const res = await api.listAudit();
   if (!res.ok) { el.innerHTML = `<p class="text-muted">${res.data.detail || 'Failed to load.'}</p>`; return; }
   let entries = Array.isArray(res.data) ? res.data : (res.data.items || []);
@@ -1221,25 +1490,36 @@ async function releaseGrant(id) {
 
 async function verifyChain() {
   const el = document.getElementById('audit-verify-result');
-  el.innerHTML = '<p class="text-muted">Verifying chain integrity...</p>';
+  const isAdmin = currentUser.role === 'Admin' || currentUser.role === 'SuperAdmin';
+  const isPatient = currentUser.role === 'Patient';
+
+  el.innerHTML = `<p class="text-muted">${isPatient ? 'Verifying your records have not been tampered with…' : 'Verifying full audit chain integrity…'}</p>`;
+
   const res = await api.verifyChain();
   if (!res.ok) {
-    el.innerHTML = `<div class="alert error">${res.data.detail || 'Failed to verify chain'}</div>`;
+    el.innerHTML = `<div class="alert error">${res.data.detail || 'Failed to verify'}</div>`;
     return;
   }
   const d = res.data;
+
   if (d.chain_intact) {
-    el.innerHTML = `<div class="alert success">✅ Audit chain integrity verified — ${d.entries_checked} entries checked, no tampering detected.</div>`;
+    const msg = isPatient
+      ? `✅ Your records are intact — ${d.entries_checked} audit entries verified. No tampering detected on your data.`
+      : `✅ Audit chain integrity verified — ${d.entries_checked} entries checked, no tampering detected.`;
+    el.innerHTML = `<div class="alert success">${msg}</div>`;
   } else {
     const ev = describeEvent(d.broken_entry_event || '');
     const time = d.broken_entry_occurred_at ? new Date(d.broken_entry_occurred_at).toLocaleString() : 'unknown';
+    const who = isPatient
+      ? 'An entry in your audit log has been altered.'
+      : `The audit chain is broken at entry #${d.first_broken_at_id}.`;
     el.innerHTML = `
       <div class="alert error">
         <strong>❌ Tampering Detected</strong><br/>
-        The audit chain is broken at entry #${d.first_broken_at_id}.<br/>
-        <strong>Tampered entry:</strong> ${ev.icon} ${ev.label} — ${time}<br/>
-        <strong>Actor:</strong> ${d.broken_entry_actor_id || 'unknown'}<br/>
-        <span class="text-sm">${d.entries_checked} entries checked. All entries from this point forward may be unreliable.</span>
+        ${who}<br/>
+        <strong>Affected entry:</strong> ${ev.icon} ${ev.label} — ${time}<br/>
+        ${!isPatient ? `<strong>Actor:</strong> ${d.broken_entry_actor_id || 'unknown'}<br/>` : ''}
+        <span class="text-sm">${d.entries_checked} entries checked. ${isPatient ? 'Contact your administrator immediately.' : 'All entries from this point forward may be unreliable.'}</span>
       </div>`;
   }
 }

@@ -55,17 +55,28 @@ async function register() {
   const password = document.getElementById('reg-password').value;
   const role = document.getElementById('reg-role').value;
   const el = document.getElementById('reg-response');
+  const btn = document.querySelector('button.btn-primary');
   el.classList.remove('hidden', 'error', 'success');
+
+  if (!full_name) { el.className = 'alert error'; el.textContent = 'Full name is required'; el.classList.remove('hidden'); return; }
+  if (password.length < 12) { el.className = 'alert error'; el.textContent = 'Password must be at least 12 characters'; el.classList.remove('hidden'); return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Creating account…';
 
   try {
     const res = await api.register(email, full_name, password, role);
     if (!res.ok) throw new Error(res.data.detail || `Error ${res.status}`);
-    el.classList.add('success');
-    el.textContent = `Account created! Role: ${res.data.role}. Redirecting...`;
+    el.className = 'alert success';
+    el.textContent = `Account created! Redirecting to login…`;
+    el.classList.remove('hidden');
     setTimeout(() => window.location.href = 'index.html', 1500);
   } catch (e) {
-    el.classList.add('error');
+    el.className = 'alert error';
     el.textContent = e.message;
+    el.classList.remove('hidden');
+    btn.disabled = false;
+    btn.textContent = 'Create Account';
   }
 }
 </script>

@@ -19,6 +19,7 @@ async def main():
     async with async_session() as db:
         user = User(
             email="superadmin@hospital.org",
+            full_name="Super Admin",
             password_hash=_hash_password("SuperAdmin123!"),
             role="SuperAdmin",
         )

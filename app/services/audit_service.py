@@ -96,6 +96,67 @@ class AuditService:
 
         return ChainVerificationResult(chain_intact=True, entries_checked=len(entries))
 
+    async def verify_my_entries(
+        self, db: AsyncSession, subject_user_id: uuid.UUID
+    ) -> ChainVerificationResult:
+        """Verify content integrity of audit entries belonging to a specific user.
+
+        Fetches the full chain in order, then for each entry that belongs to this
+        user it recomputes the hash from the raw data and checks it matches the
+        stored hash.  This detects whether any individual entry was silently edited
+        in the database — even though the patient cannot verify ordering or
+        deletions (that requires the full chain).
+        """
+        # Load the full chain in insertion order so we can recompute hashes
+        result = await db.execute(select(AuditLog).order_by(AuditLog.id.asc()))
+        all_entries = result.scalars().all()
+
+        subject_str = str(subject_user_id)
+        my_entries = [
+            e for e in all_entries
+            if (
+                str(e.actor_id) == subject_str
+                or str(e.resource_id) == subject_str
+                or str((e.extra or {}).get("subject_user_id", "")) == subject_str
+                or str((e.extra or {}).get("patient_id", "")) == subject_str
+            )
+        ]
+
+        if not my_entries:
+            return ChainVerificationResult(chain_intact=True, entries_checked=0)
+
+        # Walk the full chain to build a map of id → expected_hash
+        prev_hash = "0" * 64
+        hash_map: dict[int, str] = {}
+        for entry in all_entries:
+            entry_data = {
+                "event_type": entry.event_type,
+                "actor_id": str(entry.actor_id),
+                "resource_id": str(entry.resource_id),
+                "resource_type": entry.resource_type,
+                "client_ip": entry.client_ip,
+                "occurred_at": entry.occurred_at.isoformat(),
+                "extra": entry.extra,
+            }
+            serialized = json.dumps(entry_data, sort_keys=True, separators=(",", ":"))
+            expected = hashlib.sha256((serialized + prev_hash).encode()).hexdigest()
+            hash_map[entry.id] = expected
+            prev_hash = entry.chain_hash  # use stored hash to continue chain
+
+        # Now check only the patient's entries
+        for entry in my_entries:
+            if hash_map.get(entry.id) != entry.chain_hash:
+                return ChainVerificationResult(
+                    chain_intact=False,
+                    entries_checked=len(my_entries),
+                    first_broken_at_id=entry.id,
+                    broken_entry_event=entry.event_type,
+                    broken_entry_occurred_at=entry.occurred_at,
+                    broken_entry_actor_id=entry.actor_id,
+                )
+
+        return ChainVerificationResult(chain_intact=True, entries_checked=len(my_entries))
+
     async def list_entries(
         self, db: AsyncSession, filters: AuditFilter
     ) -> list[AuditEntryOut]:
